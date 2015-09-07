@@ -1,0 +1,150 @@
+---
+title: "Practical Machine Learning"
+author: "Olusoji Oluwafemi Daniel"
+date: "Monday, March 16, 2015"
+output: html_document
+---
+
+```{r setoptions, echo=FALSE,results='hide',message=FALSE,warning=FALSE}
+library(knitr)
+library(reshape)
+library(ggplot2)
+library(caret)
+library(gridExtra)
+library(rattle)
+opts_chunk$set(warning=FALSE, echo=TRUE,fig.height=5, fig.width=7,message=FALSE,cache=TRUE)
+```
+
+### Abstract 
+
+This work aims to predict the way and manner a group of enthusiasts who take measurements about themselves regularly to improve their health. This is done in other to find patterns in their behavior. Aside some exploratory analysis aimed at discovering associations between selected variables in the dataset, a prediction model was built using the **boosting** machine learning algorithm which has a prediction accuracy of about 99% based on a test set extracted from the training set. **Bootstrapping** with a sample size of 2 was used as the cross validation method. This will enhance the prediction model but it will lead to an underestimation of  the out of sample error. The out of sample error rate is about 28%.
+
+### Summary
+
+This work examines the relationship between variables measured from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. Information about the dataset used for this work is available on [this wepage] [1]. The training dataset can be downloaded via [this link][2] and the independent testing dataset is also available via [this link][3]. No preprocessing was carried out on the data since a function was written to remove the columns containing missing values. A train control option of *bootstraping* was used, this was done to help improve the prediction algorithm but this will underestimates the out of sample error rate of the model. The final model has an accuracy of about $99\%$.
+
+### Reading in The Test and Training Data Sets
+
+```{r readdata}
+setwd("~/practicalmachinedata")
+#training dataset
+training <- read.csv("pml-training.csv",header=T,blank.lines.skip=T,stringsAsFactors=F,na.strings="",skipNul=T)
+#testing dataset
+testing <- read.csv("pml-testing.csv",header=T,blank.lines.skip=T,na.strings="")
+```
+
+### Data Cleaning
+
+After removing the first 5 variables, an identify function was written to help identify columns containing *NAs*, this columns are then removed from the training and testing dataset.
+
+```{r}
+training <- training[,c(-1,-2,-3,-4,-5)]
+#
+testing <- testing[,c(-1,-2,-3,-4,-5)]
+#
+training[,1] <- as.factor(training[,1])
+#
+testing[,1] <- as.factor(testing[,1])
+#
+training$classe <- as.factor(training$classe)
+#Function ot identify bad columns
+identify <- function(x)
+  {
+    if(!is.null(x) | is.data.frame(x) == TRUE)
+      {
+        vec <- c()
+        for(i in 2:(length(x)-1))
+          {
+            a <- as.numeric(x[,i])
+            a2 <- is.na(a)
+            if(length(a[a2 == FALSE]) < (length(x[,i])/2))
+              {
+                vec <- c(vec,i) 
+              }
+          }
+        return(vec)
+      }
+    else stop("ERROR: Provide a data frame")
+  }
+#
+bad_columns <- identify(training)
+#
+training <- training[,-bad_columns]
+#
+testing <- testing[,-bad_columns]
+```
+
+### Spilitting The Training Set
+
+The training data set is further splitted into another training and testing dataset such that 70% of the data is contained in the new treaining set while the remaining 30% is assigned to the new testing dataset.
+
+```{r}
+inTrain <- createDataPartition(y=training$classe,p=0.7,list=FALSE)
+training2 <- training[inTrain,]
+testing2 <- training[-inTrain,]
+```
+
+### Exploratory Analysis
+
+An attempt is made to fish out associations between variables in this study using scatterplots and using colours to distinguish classes.
+
+```{r}
+for(i in 3:53){
+    plots <- qplot(training2[,i],training2[,i+1],data=training2,colour=classe,xlab=names(training2)[i],ylab=names(training2)[i+1],main=paste("Relationship Between",names(training2)[i], "and", names(training2)[i+1]))
+    print(plots)
+}
+```
+
+Most of the plots shows varying degree of relationship by class between variables under study. In some plots, it is quite clear that the data can be divided into groups with relationship existing between these groups.
+
+### Model Training
+
+```{r}
+mod1 <- train(classe~.,data=training2,method="gbm",metric="Accuracy",trControl=trainControl(method="boot",number=2),verbose=F)
+print(mod1$finalModel)
+```
+
+### Prediction 
+
+```{r}
+pred1 <- predict(mod1,newdata=testing2)
+confusionMatrix(pred1,testing2$classe)
+qplot(pred1,classe,data=testing2,xlab="predictions",ylab="Classe")
+pred2 <- predict(mod1,newdata=testing)
+pred2
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+pml_write_files(pred2)
+```
+
+The sensitivity and and Specificity of the developed model is above 90% for each level of the classe variable in the testing data set and the has a predictive accuracy of approximately 99%. Class **A** was only wrongly predicted 5 times, **B** 19 times, **C** 33 times and **E** was not predicted wrongly at all.
+
+### Plot Showing Model Accuracy
+
+```{r}
+plot(xtabs(~pred1+testing2$classe),col=rainbow(5),xlab="Predictions",ylab="Original Classe",main="Mosiac Plot Showing Model Prediction Accuracy")
+```
+
+The plot shows that most of the class was correctly predicted **C** was the level that was wrongly predicted the most.
+
+
+[1]: http://groupware.les.inf.puc-rio.br/har "datasource"
+[2]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv "training"
+[3]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv "testing"
+
+
+
+
+
+
+
+
+
+
+
+
